@@ -1,0 +1,143 @@
+
+const express = require('express');
+const app = express();
+const PORT = 3000;
+
+// Middleware to parse JSON
+app.use(express.json());
+
+// Logger middleware
+function logger(req, res, next) {
+    console.log(
+        `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`
+    );
+    next();
+}
+
+// Request timing middleware
+function timer(req, res, next) {
+    const start = Date.now();
+
+    res.on('finish', () => {
+        console.log(
+            `Request completed in ${Date.now() - start} ms`
+        );
+    });
+
+    next();
+}
+
+// Apply middleware globally
+app.use(logger);
+app.use(timer);
+
+// Route-specific middleware
+function checkApiKey(req, res, next) {
+    if (req.headers['x-api-key'] === '12345') {
+        next();
+    } else {
+        res.status(401).send('Unauthorized');
+    }
+}
+
+// Part (a): Routing and parameters
+
+app.get('/', (req, res) => {
+    res.send('Welcome to ExpressJS!');
+});
+
+app.get('/user/:id', (req, res) => {
+    res.send(`User ID: ${req.params.id}`);
+});
+
+app.get('/search', (req, res) => {
+    const q = req.query.q || '';
+    const limit = req.query.limit || '10';
+
+    res.send(`Searching for '${q}', limit ${limit}`);
+});
+
+app.get('/current-url', (req, res) => {
+    res.json({ originalUrl: req.originalUrl });
+});
+
+app.get('/home', (req, res) => {
+    res.redirect('/');
+});
+
+// Part (b): In-memory Books resource
+
+let books = [
+    { id: 1, title: 'The Hobbit', author: 'Tolkien' },
+    { id: 2, title: 'Dune', author: 'Herbert' }
+];
+
+let nextId = 3;
+
+// GET all books
+app.get('/books', (req, res) => {
+    res.json(books);
+});
+
+// GET a specific book
+app.get('/books/:id', (req, res) => {
+    const id = Number(req.params.id);
+    const book = books.find(b => b.id === id);
+
+    if (!book) {
+        return res.status(404).json({ error: 'Book not found' });
+    }
+
+    res.json(book);
+});
+
+// POST a new book
+app.post('/books', (req, res) => {
+    const { title, author } = req.body;
+
+    if (
+        typeof title !== 'string' || !title.trim() ||
+        typeof author !== 'string' || !author.trim()
+    ) {
+        return res.status(400).json({
+            error: 'Title and author are required'
+        });
+    }
+
+    const book = {
+        id: nextId++,
+        title: title.trim(),
+        author: author.trim()
+    };
+
+    books.push(book);
+    res.status(201).json(book);
+});
+
+// DELETE a book
+app.delete('/books/:id', (req, res) => {
+    const id = Number(req.params.id);
+    const index = books.findIndex(b => b.id === id);
+
+    if (index === -1) {
+        return res.status(404).json({ error: 'Book not found' });
+    }
+
+    books.splice(index, 1);
+    res.status(204).end();
+});
+
+// Example route with specific middleware
+app.get('/protected', checkApiKey, (req, res) => {
+    res.send('Access granted');
+});
+
+// 404 handler (must be last)
+app.use((req, res) => {
+    res.status(404).send('Route Not Found');
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+});
